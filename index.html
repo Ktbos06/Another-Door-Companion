@@ -13,18 +13,106 @@
     }
     body {
       background-color: #281830;
-      /* Change the 0.75 below to adjust the fade: higher = fainter image, lower = stronger image */
+      /* Change the 0.65 below to adjust the fade: higher = fainter image, lower = stronger image */
       background-image:
-        linear-gradient(rgba(40, 24, 48, 0.75), rgba(40, 24, 48, 0.75)),
+        linear-gradient(rgba(40, 24, 48, 0.65), rgba(40, 24, 48, 0.65)),
         url("background.jpg");
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
+      color: #f5ead6;
+      font-family: system-ui, sans-serif;
     }
+    .view { display: none; height: 100%; box-sizing: border-box; padding: 12px; }
+    .view.active { display: flex; flex-direction: column; gap: 12px; }
+    button {
+      font: inherit;
+      color: inherit;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(245, 234, 214, 0.5);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    /* Home page */
+    #home { justify-content: center; }
+    #home .characters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* Main screen: three parts */
+    .part {
+      border: 1px solid rgba(245, 234, 214, 0.5);
+      border-radius: 8px;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+    #stats { flex: 0 0 auto; }
+    #buttons { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; }
+    #list { flex: 1 1 auto; overflow-y: auto; }
+    .row { display: flex; gap: 8px; }
+    .row > button { flex: 1; }
+    h2 { margin: 0 0 8px; font-size: 1rem; }
   </style>
 </head>
 <body>
+
+  <!-- Home page: character select -->
+  <div id="home" class="view active">
+    <div class="characters">
+      <button data-character="Shadow">Shadow</button>
+      <button data-character="Flynt">Flynt</button>
+      <button data-character="Winslet">Winslet</button>
+      <button data-character="Basalt">Basalt</button>
+      <button data-character="Simone">Simone</button>
+      <button data-character="Aise">Aise</button>
+    </div>
+  </div>
+
+  <!-- Main screen -->
+  <div id="main" class="view">
+
+    <!-- Part 1: character and stats -->
+    <div id="stats" class="part">
+      <h2 id="character-name"></h2>
+      <div>HP: – / –</div>
+      <div>Gems: – (secured: –)</div>
+      <div>Active statuses / items:</div>
+    </div>
+
+    <!-- Part 2: buttons -->
+    <div id="buttons" class="part">
+      <div class="row">
+        <button>Add</button>
+        <button>Remove</button>
+      </div>
+      <div class="row">
+        <button>Health</button>
+        <button>Gems</button>
+      </div>
+      <div class="row">
+        <button>Amount</button>
+      </div>
+      <div class="row">
+        <button>Another Door</button>
+        <button>Leave</button>
+      </div>
+    </div>
+
+    <!-- Part 3: status / item list (filled in later) -->
+    <div id="list" class="part">
+      <h2>Statuses / Items</h2>
+    </div>
+
+  </div>
+
   <script>
+    document.querySelectorAll('[data-character]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.getElementById('character-name').textContent = btn.dataset.character;
+        document.getElementById('home').classList.remove('active');
+        document.getElementById('main').classList.add('active');
+      });
+    });
+
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('service-worker.js');
     }

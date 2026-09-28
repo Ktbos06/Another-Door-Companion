@@ -45,12 +45,33 @@
       padding: 12px;
       box-sizing: border-box;
     }
-    #stats { flex: 0 0 auto; }
+    #stats { flex: 0 0 auto; display: flex; gap: 12px; }
+    .stats-left { flex: 0 0 auto; }
+    .stats-right { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; }
+    .secured {
+      margin-top: 8px;
+      border: 1px solid rgba(245, 234, 214, 0.5);
+      border-radius: 8px;
+      padding: 8px;
+    }
     #buttons { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; }
     #list { flex: 1 1 auto; overflow-y: auto; }
     .row { display: flex; gap: 8px; }
     .row > button { flex: 1; }
     h2 { margin: 0 0 8px; font-size: 1rem; }
+    button.selected { background: rgba(245, 234, 214, 0.3); }
+    button:disabled { opacity: 0.4; }
+    input {
+      flex: 1;
+      min-width: 0;
+      font: inherit;
+      color: inherit;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(245, 234, 214, 0.5);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    input[hidden] { display: none; }
   </style>
 </head>
 <body>
@@ -72,28 +93,39 @@
 
     <!-- Part 1: character and stats -->
     <div id="stats" class="part">
-      <h2 id="character-name"></h2>
-      <div>HP: – / –</div>
-      <div>Gems: – (secured: –)</div>
-      <div>Active statuses / items:</div>
+      <div class="stats-left">
+        <h2 id="character-name"></h2>
+        <div>HP: <span id="hp">100</span> / <span id="max-hp">100</span></div>
+        <div>Gems: <span id="gems">0</span></div>
+        <div class="secured">Secured gems: <span id="secured-gems">0</span></div>
+      </div>
+      <!-- Active statuses / items: sit side by side, wrap to the next row when full -->
+      <div id="active-items" class="stats-right"></div>
     </div>
 
     <!-- Part 2: buttons -->
     <div id="buttons" class="part">
       <div class="row">
-        <button>Add</button>
-        <button>Remove</button>
+        <button data-action="add">Add</button>
+        <button data-action="remove">Remove</button>
       </div>
       <div class="row">
-        <button>Health</button>
-        <button>Gems</button>
+        <button data-target="hp">Health</button>
+        <button data-target="gems">Gems</button>
+        <button data-target="maxhp">Max HP</button>
       </div>
       <div class="row">
-        <button>Amount</button>
+        <input id="amount" type="number" inputmode="numeric" min="0" step="1" placeholder="Amount">
+        <input id="amount-low" type="number" inputmode="numeric" min="0" step="1" placeholder="Lowest" hidden>
+        <input id="amount-high" type="number" inputmode="numeric" min="0" step="1" placeholder="Highest" hidden>
+        <button id="random-toggle">Random</button>
+      </div>
+      <div class="row">
+        <button id="confirm" disabled>Confirm</button>
       </div>
       <div class="row">
         <button>Another Door</button>
-        <button>Leave</button>
+        <button id="leave">Leave</button>
       </div>
     </div>
 
@@ -111,6 +143,98 @@
         document.getElementById('home').classList.remove('active');
         document.getElementById('main').classList.add('active');
       });
+    });
+
+    var values = { hp: 100, maxhp: 100, gems: 0, secured: 0 };
+    var choice = { action: null, target: null, random: false };
+    var amountEl = document.getElementById('amount');
+    var lowEl = document.getElementById('amount-low');
+    var highEl = document.getElementById('amount-high');
+    var confirmEl = document.getElementById('confirm');
+
+    function whole(el) {
+      var n = Number(el.value);
+      return el.value !== '' && Number.isInteger(n) && n >= 0 ? n : null;
+    }
+
+    function render() {
+      document.getElementById('hp').textContent = values.hp;
+      document.getElementById('max-hp').textContent = values.maxhp;
+      document.getElementById('gems').textContent = values.gems;
+      document.getElementById('secured-gems').textContent = values.secured;
+    }
+
+    function updateConfirm() {
+      var ok = choice.action && choice.target;
+      if (choice.random) {
+        var lo = whole(lowEl), hi = whole(highEl);
+        ok = ok && lo !== null && hi !== null && lo <= hi;
+      } else {
+        ok = ok && whole(amountEl) !== null;
+      }
+      confirmEl.disabled = !ok;
+    }
+
+    function bindGroup(attr, key) {
+      document.querySelectorAll('[data-' + attr + ']').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          choice[key] = btn.dataset[attr];
+          document.querySelectorAll('[data-' + attr + ']').forEach(function (b) {
+            b.classList.toggle('selected', b === btn);
+          });
+          updateConfirm();
+        });
+      });
+    }
+    bindGroup('action', 'action');
+    bindGroup('target', 'target');
+
+    document.getElementById('random-toggle').addEventListener('click', function () {
+      choice.random = !choice.random;
+      this.classList.toggle('selected', choice.random);
+      amountEl.hidden = choice.random;
+      lowEl.hidden = !choice.random;
+      highEl.hidden = !choice.random;
+      updateConfirm();
+    });
+
+    [amountEl, lowEl, highEl].forEach(function (el) {
+      el.addEventListener('input', updateConfirm);
+    });
+
+    confirmEl.addEventListener('click', function () {
+      var amount;
+      if (choice.random) {
+        var lo = whole(lowEl), hi = whole(highEl);
+        amount = lo + Math.floor(Math.random() * (hi - lo + 1));
+      } else {
+        amount = whole(amountEl);
+      }
+      var change = choice.action === 'add' ? amount : -amount;
+      if (choice.target === 'maxhp') {
+        var oldMax = values.maxhp;
+        values.maxhp = Math.max(0, oldMax + change);
+        if (values.maxhp > oldMax) {
+          // max HP went up: HP goes up by the same amount
+          values.hp += values.maxhp - oldMax;
+        }
+        // max HP went below HP: HP lowers to the new max
+        values.hp = Math.min(values.hp, values.maxhp);
+      } else if (choice.target === 'hp') {
+        // HP can't go below 0 or above max HP
+        values.hp = Math.min(values.maxhp, Math.max(0, values.hp + change));
+      } else {
+        values.gems = Math.max(0, values.gems + change);
+      }
+      render();
+    });
+
+    document.getElementById('leave').addEventListener('click', function () {
+      if (confirm('Leave? Your current gems will be moved to your secured gems.')) {
+        values.secured += values.gems;
+        values.gems = 0;
+        render();
+      }
     });
 
     if ('serviceWorker' in navigator) {

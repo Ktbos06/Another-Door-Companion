@@ -1,4 +1,4 @@
-const CACHE_NAME = 'another-door-v3';
+const CACHE_NAME = 'another-door-v6';
 const FILES = ['./', 'index.html', 'manifest.json', 'background.jpg'];
 
 self.addEventListener('install', (event) => {

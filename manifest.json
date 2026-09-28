@@ -3,5 +3,7 @@
   "short_name": "Another Door",
   "start_url": "./",
   "scope": "./",
-  "display": "standalone"
+  "display": "standalone",
+  "background_color": "#281830",
+  "theme_color": "#281830"
 }

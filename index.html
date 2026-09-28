@@ -3,8 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#281830">
   <title>Another Door Companion</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    body {
+      background-color: #281830;
+      /* Change the 0.75 below to adjust the fade: higher = fainter image, lower = stronger image */
+      background-image:
+        linear-gradient(rgba(40, 24, 48, 0.75), rgba(40, 24, 48, 0.75)),
+        url("background.jpg");
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+  </style>
 </head>
 <body>
   <script>

@@ -1,5 +1,5 @@
-const CACHE_NAME = 'another-door-v1';
-const FILES = ['./', 'index.html', 'manifest.json'];
+const CACHE_NAME = 'another-door-v2';
+const FILES = ['./', 'index.html', 'manifest.json', 'background.jpg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(FILES)));

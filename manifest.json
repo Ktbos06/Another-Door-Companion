@@ -1,0 +1,7 @@
+{
+  "name": "Another Door Companion",
+  "short_name": "Another Door",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone"
+}

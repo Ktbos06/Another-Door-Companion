@@ -37,6 +37,19 @@
     /* Home page */
     #home { justify-content: center; }
     #home .characters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    #home .characters button {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    #home .characters img { width: 56px; height: 56px; object-fit: contain; }
+
+    .character-header { display: flex; align-items: center; gap: 8px; }
+    #character-icon { width: 36px; height: 36px; object-fit: contain; }
+    .character-header h2 { margin: 0; }
+
+    #end-character-icon { width: 72px; height: 72px; object-fit: contain; }
 
     /* Main screen: three parts */
     .part {
@@ -182,12 +195,12 @@
   <!-- Home page: character select -->
   <div id="home" class="view active">
     <div class="characters">
-      <button data-character="Shadow">Shadow</button>
-      <button data-character="Flynt">Flynt</button>
-      <button data-character="Winslet">Winslet</button>
-      <button data-character="Basalt">Basalt</button>
-      <button data-character="Simone">Simone</button>
-      <button data-character="Aise">Aise</button>
+      <button data-character="Shadow"><img src="characters/sprRogueHead_0.png" alt="">Shadow</button>
+      <button data-character="Flynt"><img src="characters/sprKnightHead_0.png" alt="">Flynt</button>
+      <button data-character="Winslet"><img src="characters/sprWinsletHead_0.png" alt="">Winslet</button>
+      <button data-character="Basalt"><img src="characters/sprBasaltHead_0.png" alt="">Basalt</button>
+      <button data-character="Simone"><img src="characters/sprNecromancerHead_0.png" alt="">Simone</button>
+      <button data-character="Aise"><img src="characters/sprAiseHead_0.png" alt="">Aise</button>
     </div>
   </div>
 
@@ -198,7 +211,10 @@
     <div id="stats" class="part">
       <div class="stats-left">
         <div id="round-tracker">Round <span id="round-num">1</span> / 3</div>
-        <h2 id="character-name"></h2>
+        <div class="character-header">
+          <img id="character-icon" src="" alt="">
+          <h2 id="character-name"></h2>
+        </div>
         <div>HP: <span id="hp">100</span> / <span id="max-hp">100</span></div>
         <div>Gems: <span id="gems">0</span></div>
         <div class="secured">Secured gems: <span id="secured-gems">0</span></div>
@@ -306,14 +322,25 @@
   <!-- End of game -->
   <div id="end" class="view">
     <h2>Game Over</h2>
+    <img id="end-character-icon" src="" alt="">
     <div id="end-character"></div>
     <div>Secured Gems: <span id="end-secured"></span></div>
   </div>
 
   <script>
+    var CHARACTER_ICONS = {
+      Shadow: 'characters/sprRogueHead_0.png',
+      Flynt: 'characters/sprKnightHead_0.png',
+      Winslet: 'characters/sprWinsletHead_0.png',
+      Basalt: 'characters/sprBasaltHead_0.png',
+      Simone: 'characters/sprNecromancerHead_0.png',
+      Aise: 'characters/sprAiseHead_0.png'
+    };
+
     document.querySelectorAll('[data-character]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         document.getElementById('character-name').textContent = btn.dataset.character;
+        document.getElementById('character-icon').src = CHARACTER_ICONS[btn.dataset.character];
         document.getElementById('home').classList.remove('active');
         document.getElementById('main').classList.add('active');
       });
@@ -942,6 +969,8 @@
       if (round >= 3) {
         document.getElementById('end-character').textContent =
           document.getElementById('character-name').textContent;
+        document.getElementById('end-character-icon').src =
+          document.getElementById('character-icon').src;
         document.getElementById('end-secured').textContent = values.secured;
         document.getElementById('main').classList.remove('active');
         document.getElementById('end').classList.add('active');

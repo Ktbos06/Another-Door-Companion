@@ -343,16 +343,39 @@
       document.getElementById('modal-dead-message').hidden = !dead;
     }
 
+    // Effects that ask you to hand something to the other players when you die.
+    // Not automated (this app only tracks one player), so it's a reminder popup instead.
+    var ON_DEATH_REMINDERS = {
+      "Rat's Tail": { qty: 5, effect: 'Poison' },
+      'Dynamite': { qty: 1, effect: 'BOOM' },
+      'Gold Coin': { qty: 1, effect: 'Dictatorship' },
+      'Baby Bottle': { qty: 1, effect: 'Confusion' }
+    };
+
     function checkDeath() {
       if (values.hp <= 0 && !dead) {
         dead = true;
         roundOver = true;
+
+        var reminders = [];
+        Object.keys(ON_DEATH_REMINDERS).forEach(function (name) {
+          var stacks = activeItems[name];
+          if (stacks) {
+            var info = ON_DEATH_REMINDERS[name];
+            reminders.push('Give each other player ' + (info.qty * stacks) + ' ' + info.effect + ' (' + name + ' x' + stacks + ')');
+          }
+        });
+
         // Points and statuses/items are lost the moment you die, not when you revive
         values.gems = 0;
         activeItems = {};
         render();
         renderActiveItems();
         updateRoundUI();
+
+        if (reminders.length) {
+          alert('You died!\n\n' + reminders.join('\n'));
+        }
       }
     }
     var ITEMS = [
@@ -639,6 +662,17 @@
       return el.value !== '' && Number.isInteger(n) && n >= 0 ? n : null;
     }
 
+    // Percentage-mode amounts may be left blank, meaning "no change" (e.g. a 50/50
+    // to take 30 damage or nothing at all, without having to type 0).
+    function wholeOrZero(el) {
+      if (el.value === '') return 0;
+      return whole(el);
+    }
+
+    function pctRoll(p) {
+      return Math.random() * 100 < p;
+    }
+
     // Applies a signed change to a target stat, with the same clamping/max-HP-link
     // rules used everywhere else in the app.
     function applyChange(target, change) {
@@ -663,13 +697,106 @@
       document.getElementById('secured-gems').textContent = values.secured;
     }
 
+    function owns(name) {
+      return !!activeItems[name];
+    }
+
+    // Adds qty of an item/status to the character, applying its "upon pickup" bonus
+    // (permanent even if the item is later removed) and Hand Magnifier's duplication.
+    // Returns false if Murky Water blocked the pickup.
+    function gainItem(name, qty, fromMagnifier) {
+      var alreadyOwned = owns(name);
+      if (owns('Murky Water') && !alreadyOwned && name !== 'Murky Water') {
+        alert("Murky Water is active: you can't get any effects you don't already have.");
+        return false;
+      }
+
+      activeItems[name] = (activeItems[name] || 0) + qty;
+
+      // Upon-pickup bonuses: happen once, right now, and stick around even if the
+      // item/status is later removed (a Next Round reset still clears them).
+      if (name === 'BAAAH') {
+        applyChange('maxhp', 3 * qty);
+      }
+      if (name === "Mother's Hoof") {
+        applyChange('maxhp', 10 * qty);
+        applyChange('gems', 10 * qty);
+      }
+
+      // Hand Magnifier: whenever you gain an effect, gain 1 more of it.
+      // fromMagnifier guards against the bonus copy re-triggering itself endlessly.
+      if (!fromMagnifier && owns('Hand Magnifier')) {
+        gainItem(name, 1, true);
+      }
+
+      return true;
+    }
+
+    // Gems gained through any source (direct add, healing side-effects, etc.)
+    // trigger Nudge.
+    function dealGemsDelta(rawDelta) {
+      applyChange('gems', rawDelta);
+      if (rawDelta > 0 && owns('Nudge')) {
+        applyChange('gems', 1);
+      }
+    }
+
+    function processHealing(amount, skipDoubling) {
+      if (amount <= 0) return;
+      if (!skipDoubling && owns('Grape Drink')) amount *= 2;
+      if (owns('Star-Shaped Nose')) amount += 1;
+      applyChange('hp', amount);
+      if (owns('Peaceful Mind') && pctRoll(10)) {
+        var owned = Object.keys(activeItems).filter(function (n) { return activeItems[n] > 0; });
+        if (owned.length) {
+          gainItem(owned[Math.floor(Math.random() * owned.length)], 1);
+        }
+      }
+      if (owns('Stone of Life') && pctRoll(50)) {
+        dealGemsDelta(1);
+      }
+    }
+
+    function processDamage(amount) {
+      if (amount <= 0) return;
+      if (owns('Grape Drink')) amount *= 2;
+
+      var hits = [amount];
+      if (owns('Out-of-Tune Lute')) {
+        hits = [Math.ceil(amount / 2), Math.floor(amount / 2)];
+      }
+
+      hits.forEach(function (hit) {
+        if (hit <= 0) return;
+        if (owns('Magic Stick') && pctRoll(10)) return; // fully dodged
+        if (owns('Piece of Cloth') && pctRoll(5)) {
+          processHealing(hit, true); // convert to healing, same magnitude, no re-doubling
+          return;
+        }
+        var dmg = hit;
+        if (owns('Predator Instinct') && values.maxhp > 0 && values.hp / values.maxhp <= 0.15) {
+          dmg = Math.max(1, dmg - 20);
+        }
+        if (owns("Knight's Armor")) {
+          dmg = Math.max(1, dmg - 5);
+        }
+        applyChange('hp', -dmg);
+      });
+    }
+
+    // Routes an HP change through all owned passive effects before applying it.
+    function dealHpDelta(rawDelta) {
+      if (rawDelta > 0) processHealing(rawDelta);
+      else if (rawDelta < 0) processDamage(-rawDelta);
+    }
+
     function updateConfirm() {
       var ok;
       if (choice.chance) {
         var pct = chanceAPercent.value === '' ? null : Number(chanceAPercent.value);
         ok = chanceChoice.a.action && chanceChoice.b.action &&
-             whole(chanceAAmount) !== null &&
-             whole(chanceBAmount) !== null &&
+             wholeOrZero(chanceAAmount) !== null &&
+             wholeOrZero(chanceBAmount) !== null &&
              pct !== null && Number.isInteger(pct) && pct >= 0 && pct <= 100;
         chanceBPercentLabel.textContent = (pct !== null && pct >= 0 && pct <= 100 ? (100 - pct) : '–') + '%';
       } else {
@@ -733,16 +860,25 @@
       el.addEventListener('input', updateConfirm);
     });
 
+    // Applies a signed change to whichever target was chosen, routing HP and Gems
+    // through the passive-effects pipeline (Max HP has no such passives, so it
+    // still goes straight through applyChange).
+    function applyTargetedChange(target, change) {
+      if (target === 'hp') dealHpDelta(change);
+      else if (target === 'gems') dealGemsDelta(change);
+      else applyChange(target, change);
+    }
+
     confirmEl.addEventListener('click', function () {
       if (choice.chance) {
         var pct = Number(chanceAPercent.value);
         var roll = Math.random() * 100; // 0 up to (not including) 100
         if (roll < pct) {
-          var amtA = whole(chanceAAmount);
-          applyChange(document.getElementById('chance-a-target').value, chanceChoice.a.action === 'add' ? amtA : -amtA);
+          var amtA = wholeOrZero(chanceAAmount);
+          applyTargetedChange(document.getElementById('chance-a-target').value, chanceChoice.a.action === 'add' ? amtA : -amtA);
         } else {
-          var amtB = whole(chanceBAmount);
-          applyChange(document.getElementById('chance-b-target').value, chanceChoice.b.action === 'add' ? amtB : -amtB);
+          var amtB = wholeOrZero(chanceBAmount);
+          applyTargetedChange(document.getElementById('chance-b-target').value, chanceChoice.b.action === 'add' ? amtB : -amtB);
         }
       } else {
         var amount;
@@ -753,9 +889,10 @@
           amount = whole(amountEl);
         }
         var change = choice.action === 'add' ? amount : -amount;
-        applyChange(choice.target, change);
+        applyTargetedChange(choice.target, change);
       }
       render();
+      renderActiveItems();
       checkDeath();
     });
 
@@ -830,9 +967,11 @@
     document.getElementById('modal-add').addEventListener('click', function () {
       var qty = Number(document.getElementById('modal-qty').value);
       if (!Number.isInteger(qty) || qty < 1) return;
-      activeItems[currentItem.name] = (activeItems[currentItem.name] || 0) + qty;
-      renderActiveItems();
-      modal.hidden = true;
+      if (gainItem(currentItem.name, qty)) {
+        render();
+        renderActiveItems();
+        modal.hidden = true;
+      }
     });
     modalRemoveBtn.addEventListener('click', function () {
       var qty = Number(document.getElementById('modal-qty').value);

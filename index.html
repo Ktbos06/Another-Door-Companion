@@ -673,6 +673,13 @@
       return Math.random() * 100 < p;
     }
 
+    // Splits amount into n hits as evenly as possible (remainder spread across the first few).
+    function splitEvenly(amount, n) {
+      var base = Math.floor(amount / n), rem = amount % n, hits = [];
+      for (var i = 0; i < n; i++) hits.push(base + (i < rem ? 1 : 0));
+      return hits;
+    }
+
     // Applies a signed change to a target stat, with the same clamping/max-HP-link
     // rules used everywhere else in the app.
     function applyChange(target, change) {
@@ -711,6 +718,10 @@
         return false;
       }
 
+      // Captured BEFORE adding this item, so picking up your first Hand Magnifier
+      // doesn't trigger its own bonus (magnifierStacksBefore is 0 in that case).
+      var magnifierStacksBefore = activeItems['Hand Magnifier'] || 0;
+
       activeItems[name] = (activeItems[name] || 0) + qty;
 
       // Upon-pickup bonuses: happen once, right now, and stick around even if the
@@ -723,10 +734,11 @@
         applyChange('gems', 10 * qty);
       }
 
-      // Hand Magnifier: whenever you gain an effect, gain 1 more of it.
-      // fromMagnifier guards against the bonus copy re-triggering itself endlessly.
-      if (!fromMagnifier && owns('Hand Magnifier')) {
-        gainItem(name, 1, true);
+      // Hand Magnifier: for every stack you already owned, gain 1 more of
+      // whatever you just picked up (5 magnifiers + 1 BAAAH = 6 BAAAH total).
+      // fromMagnifier guards against the bonus copies re-triggering this again.
+      if (!fromMagnifier && magnifierStacksBefore > 0) {
+        gainItem(name, magnifierStacksBefore, true);
       }
 
       return true;
@@ -761,10 +773,14 @@
       if (amount <= 0) return;
       if (owns('Grape Drink')) amount *= 2;
 
-      var hits = [amount];
-      if (owns('Out-of-Tune Lute')) {
-        hits = [Math.ceil(amount / 2), Math.floor(amount / 2)];
-      }
+      // Out-of-Tune Lute: each stack adds one more split (1 stack = 2 hits,
+      // 2 stacks = 3 hits, and so on).
+      var luteStacks = activeItems['Out-of-Tune Lute'] || 0;
+      var hits = luteStacks > 0 ? splitEvenly(amount, luteStacks + 1) : [amount];
+
+      // Knight's Armor: each stack adds -5 reduction and +1 to the minimum
+      // damage floor (2 stacks = -10 reduction, minimum 2 damage).
+      var armorStacks = activeItems["Knight's Armor"] || 0;
 
       hits.forEach(function (hit) {
         if (hit <= 0) return;
@@ -777,8 +793,8 @@
         if (owns('Predator Instinct') && values.maxhp > 0 && values.hp / values.maxhp <= 0.15) {
           dmg = Math.max(1, dmg - 20);
         }
-        if (owns("Knight's Armor")) {
-          dmg = Math.max(1, dmg - 5);
+        if (armorStacks > 0) {
+          dmg = Math.max(armorStacks, dmg - 5 * armorStacks);
         }
         applyChange('hp', -dmg);
       });
@@ -897,6 +913,12 @@
     });
 
     document.getElementById('leave').addEventListener('click', function () {
+      if (owns("Mother's Hoof")) {
+        var someoneGone = confirm("Mother's Hoof: you can't leave unless another player has already left or died. Has that happened?");
+        if (!someoneGone) {
+          return;
+        }
+      }
       if (confirm('Leave? Your current gems will be moved to your secured gems.')) {
         values.secured += values.gems;
         values.gems = 0;

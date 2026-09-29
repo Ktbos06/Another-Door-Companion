@@ -154,6 +154,19 @@
     #round-tracker { font-size: 0.8rem; opacity: 0.85; margin-bottom: 4px; }
     .row button[hidden] { display: none; }
     #end { justify-content: center; align-items: center; text-align: center; gap: 8px; }
+    select {
+      flex: 1;
+      min-width: 0;
+      font: inherit;
+      color: inherit;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(245, 234, 214, 0.5);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .chance-row { margin-bottom: 8px; align-items: center; }
+    #chance-b-percent { flex: 1; text-align: center; opacity: 0.8; }
+    #modal-remove { background: rgba(120, 20, 20, 0.4); }
   </style>
 </head>
 <body>
@@ -188,20 +201,42 @@
 
     <!-- Part 2: buttons -->
     <div id="buttons" class="part">
-      <div class="row">
+      <div class="row" id="action-row">
         <button data-action="add">Add</button>
         <button data-action="remove">Remove</button>
       </div>
-      <div class="row">
+      <div class="row" id="target-row">
         <button data-target="hp">Health</button>
         <button data-target="gems">Gems</button>
         <button data-target="maxhp">Max HP</button>
       </div>
-      <div class="row">
+      <div class="row" id="amount-row">
         <input id="amount" type="number" inputmode="numeric" min="0" step="1" placeholder="Amount">
         <input id="amount-low" type="number" inputmode="numeric" min="0" step="1" placeholder="Lowest" hidden>
         <input id="amount-high" type="number" inputmode="numeric" min="0" step="1" placeholder="Highest" hidden>
         <button id="random-toggle">Random</button>
+        <button id="chance-toggle">Chance</button>
+      </div>
+      <!-- Chance mode: two possible outcomes, one shared percentage split -->
+      <div id="chance-panel" hidden>
+        <div class="row chance-row">
+          <select id="chance-a-target">
+            <option value="hp">Health</option>
+            <option value="gems">Gems</option>
+            <option value="maxhp">Max HP</option>
+          </select>
+          <input id="chance-a-amount" type="number" step="1" placeholder="Amount (+/-)">
+          <input id="chance-a-percent" type="number" inputmode="numeric" min="0" max="100" step="1" placeholder="% chance">
+        </div>
+        <div class="row chance-row">
+          <select id="chance-b-target">
+            <option value="hp">Health</option>
+            <option value="gems">Gems</option>
+            <option value="maxhp">Max HP</option>
+          </select>
+          <input id="chance-b-amount" type="number" step="1" placeholder="Amount (+/-)">
+          <span id="chance-b-percent">100%</span>
+        </div>
       </div>
       <div class="row">
         <button id="confirm" disabled>Confirm</button>
@@ -229,7 +264,10 @@
         <p id="modal-desc"></p>
         <div class="row">
           <input id="modal-qty" type="number" inputmode="numeric" min="1" step="1" value="1">
+        </div>
+        <div class="row">
           <button id="modal-add">Add to Character</button>
+          <button id="modal-remove" hidden>Remove from Character</button>
         </div>
       </div>
     </div>
@@ -270,6 +308,11 @@
       if (values.hp <= 0 && !dead) {
         dead = true;
         roundOver = true;
+        // Points and statuses/items are lost the moment you die, not when you revive
+        values.gems = 0;
+        activeItems = {};
+        render();
+        renderActiveItems();
         updateRoundUI();
       }
     }
@@ -535,15 +578,46 @@
     "icon": "icons/SprZlataLiquorSmall_0.webp"
   }
 ];
-    var choice = { action: null, target: null, random: false };
+    var choice = { action: null, target: null, random: false, chance: false };
     var amountEl = document.getElementById('amount');
     var lowEl = document.getElementById('amount-low');
     var highEl = document.getElementById('amount-high');
     var confirmEl = document.getElementById('confirm');
+    var actionRow = document.getElementById('action-row');
+    var targetRow = document.getElementById('target-row');
+    var amountRow = document.getElementById('amount-row');
+    var chancePanel = document.getElementById('chance-panel');
+    var chanceAAmount = document.getElementById('chance-a-amount');
+    var chanceAPercent = document.getElementById('chance-a-percent');
+    var chanceBAmount = document.getElementById('chance-b-amount');
+    var chanceBPercentLabel = document.getElementById('chance-b-percent');
 
     function whole(el) {
       var n = Number(el.value);
       return el.value !== '' && Number.isInteger(n) && n >= 0 ? n : null;
+    }
+
+    function wholeSigned(el) {
+      // Chance-mode amounts can be positive, negative, or zero (e.g. "take 0 or 30 damage")
+      var n = Number(el.value);
+      return el.value !== '' && Number.isInteger(n) ? n : null;
+    }
+
+    // Applies a signed change to a target stat, with the same clamping/max-HP-link
+    // rules used everywhere else in the app.
+    function applyChange(target, change) {
+      if (target === 'maxhp') {
+        var oldMax = values.maxhp;
+        values.maxhp = Math.max(0, oldMax + change);
+        if (values.maxhp > oldMax) {
+          values.hp += values.maxhp - oldMax;
+        }
+        values.hp = Math.min(values.hp, values.maxhp);
+      } else if (target === 'hp') {
+        values.hp = Math.min(values.maxhp, Math.max(0, values.hp + change));
+      } else {
+        values.gems = Math.max(0, values.gems + change);
+      }
     }
 
     function render() {
@@ -554,12 +628,21 @@
     }
 
     function updateConfirm() {
-      var ok = choice.action && choice.target;
-      if (choice.random) {
-        var lo = whole(lowEl), hi = whole(highEl);
-        ok = ok && lo !== null && hi !== null && lo <= hi;
+      var ok;
+      if (choice.chance) {
+        var pct = chanceAPercent.value === '' ? null : Number(chanceAPercent.value);
+        ok = wholeSigned(chanceAAmount) !== null &&
+             wholeSigned(chanceBAmount) !== null &&
+             pct !== null && Number.isInteger(pct) && pct >= 0 && pct <= 100;
+        chanceBPercentLabel.textContent = (pct !== null && pct >= 0 && pct <= 100 ? (100 - pct) : '–') + '%';
       } else {
-        ok = ok && whole(amountEl) !== null;
+        ok = choice.action && choice.target;
+        if (choice.random) {
+          var lo = whole(lowEl), hi = whole(highEl);
+          ok = ok && lo !== null && hi !== null && lo <= hi;
+        } else {
+          ok = ok && whole(amountEl) !== null;
+        }
       }
       confirmEl.disabled = !ok;
     }
@@ -587,33 +670,40 @@
       updateConfirm();
     });
 
-    [amountEl, lowEl, highEl].forEach(function (el) {
+    document.getElementById('chance-toggle').addEventListener('click', function () {
+      choice.chance = !choice.chance;
+      this.classList.toggle('selected', choice.chance);
+      // Chance mode replaces the normal action/target/amount controls entirely
+      actionRow.hidden = choice.chance;
+      targetRow.hidden = choice.chance;
+      amountRow.hidden = choice.chance;
+      chancePanel.hidden = !choice.chance;
+      updateConfirm();
+    });
+
+    [amountEl, lowEl, highEl, chanceAAmount, chanceAPercent, chanceBAmount].forEach(function (el) {
       el.addEventListener('input', updateConfirm);
     });
 
     confirmEl.addEventListener('click', function () {
-      var amount;
-      if (choice.random) {
-        var lo = whole(lowEl), hi = whole(highEl);
-        amount = lo + Math.floor(Math.random() * (hi - lo + 1));
-      } else {
-        amount = whole(amountEl);
-      }
-      var change = choice.action === 'add' ? amount : -amount;
-      if (choice.target === 'maxhp') {
-        var oldMax = values.maxhp;
-        values.maxhp = Math.max(0, oldMax + change);
-        if (values.maxhp > oldMax) {
-          // max HP went up: HP goes up by the same amount
-          values.hp += values.maxhp - oldMax;
+      if (choice.chance) {
+        var pct = Number(chanceAPercent.value);
+        var roll = Math.random() * 100; // 0 up to (not including) 100
+        if (roll < pct) {
+          applyChange(document.getElementById('chance-a-target').value, wholeSigned(chanceAAmount));
+        } else {
+          applyChange(document.getElementById('chance-b-target').value, wholeSigned(chanceBAmount));
         }
-        // max HP went below HP: HP lowers to the new max
-        values.hp = Math.min(values.hp, values.maxhp);
-      } else if (choice.target === 'hp') {
-        // HP can't go below 0 or above max HP
-        values.hp = Math.min(values.maxhp, Math.max(0, values.hp + change));
       } else {
-        values.gems = Math.max(0, values.gems + change);
+        var amount;
+        if (choice.random) {
+          var lo = whole(lowEl), hi = whole(highEl);
+          amount = lo + Math.floor(Math.random() * (hi - lo + 1));
+        } else {
+          amount = whole(amountEl);
+        }
+        var change = choice.action === 'add' ? amount : -amount;
+        applyChange(choice.target, change);
       }
       render();
       checkDeath();
@@ -630,14 +720,12 @@
     });
 
     document.getElementById('revive').addEventListener('click', function () {
+      // Gems and items were already cleared the moment HP hit 0
       values.hp = 5;
       values.maxhp = 100;
-      values.gems = 0;
-      activeItems = {};
       dead = false;
       roundOver = false;
       render();
-      renderActiveItems();
       updateRoundUI();
     });
 
@@ -675,12 +763,15 @@
 
     var currentItem = null;
     var modal = document.getElementById('item-modal');
+    var modalRemoveBtn = document.getElementById('modal-remove');
     function openModal(item) {
       currentItem = item;
       document.getElementById('modal-icon').src = item.icon;
       document.getElementById('modal-name').textContent = item.name;
       document.getElementById('modal-desc').textContent = item.desc;
       document.getElementById('modal-qty').value = 1;
+      // Only owned items can be removed from the character
+      modalRemoveBtn.hidden = !activeItems[item.name];
       modal.hidden = false;
     }
     document.getElementById('modal-close').addEventListener('click', function () {
@@ -690,6 +781,18 @@
       var qty = Number(document.getElementById('modal-qty').value);
       if (!Number.isInteger(qty) || qty < 1) return;
       activeItems[currentItem.name] = (activeItems[currentItem.name] || 0) + qty;
+      renderActiveItems();
+      modal.hidden = true;
+    });
+    modalRemoveBtn.addEventListener('click', function () {
+      var qty = Number(document.getElementById('modal-qty').value);
+      if (!Number.isInteger(qty) || qty < 1) return;
+      var remaining = (activeItems[currentItem.name] || 0) - qty;
+      if (remaining > 0) {
+        activeItems[currentItem.name] = remaining;
+      } else {
+        delete activeItems[currentItem.name];
+      }
       renderActiveItems();
       modal.hidden = true;
     });

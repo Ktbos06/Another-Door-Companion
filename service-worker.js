@@ -1,4 +1,4 @@
-const CACHE_NAME = 'another-door-v11';
+const CACHE_NAME = 'another-door-v12';
 const FILES = ['./', 'index.html', 'manifest.json', 'background.jpg',
   'icons/SprBabyBottleSmall_0.webp',
   'icons/SprBadTripSmall_0.webp',

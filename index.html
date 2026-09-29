@@ -151,6 +151,9 @@
     }
     .modal-box .row { width: 100%; }
     #modal-qty { max-width: 80px; flex: 0 0 auto; }
+    #round-tracker { font-size: 0.8rem; opacity: 0.85; margin-bottom: 4px; }
+    .row button[hidden] { display: none; }
+    #end { justify-content: center; align-items: center; text-align: center; gap: 8px; }
   </style>
 </head>
 <body>
@@ -173,6 +176,7 @@
     <!-- Part 1: character and stats -->
     <div id="stats" class="part">
       <div class="stats-left">
+        <div id="round-tracker">Round <span id="round-num">1</span> / 3</div>
         <h2 id="character-name"></h2>
         <div>HP: <span id="hp">100</span> / <span id="max-hp">100</span></div>
         <div>Gems: <span id="gems">0</span></div>
@@ -203,8 +207,10 @@
         <button id="confirm" disabled>Confirm</button>
       </div>
       <div class="row">
-        <button>Another Door</button>
+        <button id="another-door">Another Door</button>
+        <button id="revive" hidden>Revive</button>
         <button id="leave">Leave</button>
+        <button id="next-round" hidden>Next Round</button>
       </div>
     </div>
 
@@ -230,6 +236,13 @@
 
   </div>
 
+  <!-- End of game -->
+  <div id="end" class="view">
+    <h2>Game Over</h2>
+    <div id="end-character"></div>
+    <div>Secured Gems: <span id="end-secured"></span></div>
+  </div>
+
   <script>
     document.querySelectorAll('[data-character]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -241,6 +254,25 @@
 
     var values = { hp: 100, maxhp: 100, gems: 0, secured: 0 };
     var activeItems = {}; // name -> count
+    var round = 1;
+    var dead = false;
+    var roundOver = false;
+
+    function updateRoundUI() {
+      document.getElementById('leave').hidden = roundOver;
+      document.getElementById('next-round').hidden = !roundOver;
+      document.getElementById('another-door').hidden = roundOver;
+      document.getElementById('revive').hidden = !(roundOver && dead);
+      document.getElementById('round-num').textContent = round;
+    }
+
+    function checkDeath() {
+      if (values.hp <= 0 && !dead) {
+        dead = true;
+        roundOver = true;
+        updateRoundUI();
+      }
+    }
     var ITEMS = [
   {
     "name": "A Tooth",
@@ -584,14 +616,50 @@
         values.gems = Math.max(0, values.gems + change);
       }
       render();
+      checkDeath();
     });
 
     document.getElementById('leave').addEventListener('click', function () {
       if (confirm('Leave? Your current gems will be moved to your secured gems.')) {
         values.secured += values.gems;
         values.gems = 0;
+        roundOver = true;
         render();
+        updateRoundUI();
       }
+    });
+
+    document.getElementById('revive').addEventListener('click', function () {
+      values.hp = 5;
+      values.maxhp = 100;
+      values.gems = 0;
+      activeItems = {};
+      dead = false;
+      roundOver = false;
+      render();
+      renderActiveItems();
+      updateRoundUI();
+    });
+
+    document.getElementById('next-round').addEventListener('click', function () {
+      if (round >= 3) {
+        document.getElementById('end-character').textContent =
+          document.getElementById('character-name').textContent;
+        document.getElementById('end-secured').textContent = values.secured;
+        document.getElementById('main').classList.remove('active');
+        document.getElementById('end').classList.add('active');
+        return;
+      }
+      round += 1;
+      values.hp = 100;
+      values.maxhp = 100;
+      values.gems = 0;
+      activeItems = {};
+      dead = false;
+      roundOver = false;
+      render();
+      renderActiveItems();
+      updateRoundUI();
     });
 
     function renderDbGrid() {
@@ -641,6 +709,7 @@
     }
 
     renderDbGrid();
+    updateRoundUI();
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('service-worker.js');

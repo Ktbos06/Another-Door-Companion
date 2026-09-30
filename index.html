@@ -181,6 +181,51 @@
     .chance-outcome .row { margin-bottom: 6px; }
     #chance-b-percent { flex: 1; text-align: center; opacity: 0.8; }
     #modal-remove { background: rgba(120, 20, 20, 0.4); }
+    #main { position: relative; }
+    #floating-numbers {
+      position: absolute;
+      top: 8px;
+      left: 0;
+      right: 0;
+      display: flex;
+      flex-direction: column-reverse;
+      align-items: center;
+      gap: 4px;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .floating-number {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+      animation: float-up 1.2s ease-out forwards;
+    }
+    .floating-icon {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+    }
+    .floating-number.gain { color: #8be28b; }
+    .floating-number.loss { color: #e2726b; }
+    @keyframes float-up {
+      0% { opacity: 0; transform: translateY(6px) scale(0.9); }
+      15% { opacity: 1; transform: translateY(0) scale(1.05); }
+      30% { transform: translateY(0) scale(1); }
+      80% { opacity: 1; }
+      100% { opacity: 0; transform: translateY(-30px) scale(1); }
+    }
+
+    #turn-prompt {
+      border: 1px solid rgba(245, 234, 214, 0.5);
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 8px;
+    }
+    #turn-prompt p { margin: 0 0 8px; text-align: center; font-size: 0.85rem; }
     #dead-message, #modal-dead-message {
       text-align: center;
       font-size: 0.85rem;
@@ -206,6 +251,8 @@
 
   <!-- Main screen -->
   <div id="main" class="view">
+    <!-- Floating +/- popups for HP/Gems/Max HP changes -->
+    <div id="floating-numbers"></div>
 
     <!-- Part 1: character and stats -->
     <div id="stats" class="part">
@@ -285,6 +332,15 @@
         </div>
       </div>
 
+      <!-- Shown after Confirm: asks whether to move to the next encounter -->
+      <div id="turn-prompt" hidden>
+        <p>Are you going to the next encounter?</p>
+        <div class="row">
+          <button id="next-turn">Next Turn</button>
+          <button id="continue-turn">Continue This Turn</button>
+        </div>
+      </div>
+
       <div class="row">
         <button id="another-door">Another Door</button>
         <button id="revive" hidden>Revive</button>
@@ -358,6 +414,7 @@
       document.getElementById('another-door').hidden = roundOver;
       document.getElementById('revive').hidden = !(roundOver && dead);
       document.getElementById('round-num').textContent = round;
+      document.getElementById('turn-prompt').hidden = true;
       updateDeadLock();
     }
 
@@ -365,6 +422,7 @@
     function updateDeadLock() {
       statControls.hidden = dead;
       deadMessage.hidden = !dead;
+      if (dead) document.getElementById('turn-prompt').hidden = true;
       document.getElementById('modal-controls').hidden = dead;
       document.getElementById('modal-buttons').hidden = dead;
       document.getElementById('modal-dead-message').hidden = !dead;
@@ -708,8 +766,16 @@
     }
 
     // Applies a signed change to a target stat, with the same clamping/max-HP-link
-    // rules used everywhere else in the app.
-    function applyChange(target, change) {
+    // rules used everywhere else in the app. Fires a floating +/- popup for
+    // whatever actually changed (which can differ from the requested amount,
+    // e.g. when clamped by 0 or by max HP).
+    // sourceItem, when given, is the item/status responsible for this change
+    // (e.g. 'BAAAH', "Mother's Hoof", 'Nudge') and shows that item's icon on
+    // the popup. Left out for plain manual Add/Remove changes, which show a
+    // plain number with no icon.
+    function applyChange(target, change, sourceItem) {
+      var beforeHp = values.hp, beforeMax = values.maxhp, beforeGems = values.gems;
+
       if (target === 'maxhp') {
         var oldMax = values.maxhp;
         values.maxhp = Math.max(0, oldMax + change);
@@ -722,6 +788,45 @@
       } else {
         values.gems = Math.max(0, values.gems + change);
       }
+
+      if (values.maxhp !== beforeMax) showFloatingNumber('maxhp', values.maxhp - beforeMax, sourceItem);
+      if (values.hp !== beforeHp) showFloatingNumber('hp', values.hp - beforeHp, sourceItem);
+      if (values.gems !== beforeGems) showFloatingNumber('gems', values.gems - beforeGems, sourceItem);
+    }
+
+    var FLOATING_LABELS = { hp: 'HP', gems: 'Gems', maxhp: 'Max HP' };
+
+    function showFloatingNumber(target, delta, sourceItem) {
+      if (!delta) return;
+      var text = (delta > 0 ? '+' : '') + delta + ' ' + FLOATING_LABELS[target];
+      showEffectPopup(text, sourceItem, delta > 0 ? 'gain' : 'loss');
+    }
+
+    // Reusable floating popup: a short line of text, optionally with the
+    // icon of the item/status responsible. Used for every stat change
+    // (manual, item pickups, and later automated effects like Poison), and
+    // for icon-only events like a dodge that changes nothing numerically.
+    function showEffectPopup(text, sourceItem, cssClass) {
+      var el = document.createElement('div');
+      el.className = 'floating-number' + (cssClass ? ' ' + cssClass : '');
+      if (sourceItem) {
+        var item = ITEMS.filter(function (i) { return i.name === sourceItem; })[0];
+        if (item) {
+          var img = document.createElement('img');
+          img.src = item.icon;
+          img.alt = '';
+          img.className = 'floating-icon';
+          el.appendChild(img);
+        }
+      }
+      var span = document.createElement('span');
+      span.textContent = text;
+      el.appendChild(span);
+      var container = document.getElementById('floating-numbers');
+      container.appendChild(el);
+      el.addEventListener('animationend', function () {
+        el.remove();
+      });
     }
 
     function render() {
@@ -754,11 +859,11 @@
       // Upon-pickup bonuses: happen once, right now, and stick around even if the
       // item/status is later removed (a Next Round reset still clears them).
       if (name === 'BAAAH') {
-        applyChange('maxhp', 3 * qty);
+        applyChange('maxhp', 3 * qty, 'BAAAH');
       }
       if (name === "Mother's Hoof") {
-        applyChange('maxhp', 10 * qty);
-        applyChange('gems', 10 * qty);
+        applyChange('maxhp', 10 * qty, "Mother's Hoof");
+        applyChange('gems', 10 * qty, "Mother's Hoof");
       }
 
       // Hand Magnifier: for every stack you already owned, gain 1 more of
@@ -773,18 +878,20 @@
 
     // Gems gained through any source (direct add, healing side-effects, etc.)
     // trigger Nudge.
-    function dealGemsDelta(rawDelta) {
-      applyChange('gems', rawDelta);
+    function dealGemsDelta(rawDelta, sourceItem) {
+      applyChange('gems', rawDelta, sourceItem);
       if (rawDelta > 0 && owns('Nudge')) {
-        applyChange('gems', 1);
+        applyChange('gems', 1, 'Nudge');
       }
     }
 
-    function processHealing(amount, skipDoubling) {
+    // sourceItem: the item/status causing this heal, if any (e.g. later, a
+    // healing tile might pass nothing, but a healing status effect would).
+    function processHealing(amount, skipDoubling, sourceItem) {
       if (amount <= 0) return;
       if (!skipDoubling && owns('Grape Drink')) amount *= 2;
       if (owns('Star-Shaped Nose')) amount += 1;
-      applyChange('hp', amount);
+      applyChange('hp', amount, sourceItem);
       if (owns('Peaceful Mind') && pctRoll(10)) {
         var owned = Object.keys(activeItems).filter(function (n) { return activeItems[n] > 0; });
         if (owned.length) {
@@ -792,11 +899,13 @@
         }
       }
       if (owns('Stone of Life') && pctRoll(50)) {
-        dealGemsDelta(1);
+        dealGemsDelta(1, 'Stone of Life');
       }
     }
 
-    function processDamage(amount) {
+    // sourceItem: the item/status dealing this damage, if any (used later by
+    // things like Poison so its icon shows on the popup).
+    function processDamage(amount, sourceItem) {
       if (amount <= 0) return;
       if (owns('Grape Drink')) amount *= 2;
 
@@ -811,9 +920,12 @@
 
       hits.forEach(function (hit) {
         if (hit <= 0) return;
-        if (owns('Magic Stick') && pctRoll(10)) return; // fully dodged
+        if (owns('Magic Stick') && pctRoll(10)) {
+          showEffectPopup('Dodged!', 'Magic Stick', 'gain');
+          return;
+        }
         if (owns('Piece of Cloth') && pctRoll(5)) {
-          processHealing(hit, true); // convert to healing, same magnitude, no re-doubling
+          processHealing(hit, true, 'Piece of Cloth'); // convert to healing, same magnitude, no re-doubling
           return;
         }
         var dmg = hit;
@@ -823,14 +935,16 @@
         if (armorStacks > 0) {
           dmg = Math.max(armorStacks, dmg - 5 * armorStacks);
         }
-        applyChange('hp', -dmg);
+        applyChange('hp', -dmg, sourceItem);
       });
     }
 
     // Routes an HP change through all owned passive effects before applying it.
-    function dealHpDelta(rawDelta) {
-      if (rawDelta > 0) processHealing(rawDelta);
-      else if (rawDelta < 0) processDamage(-rawDelta);
+    // sourceItem: the item/status causing this change, if any (blank for
+    // manual Add/Remove/Random/Percentage changes).
+    function dealHpDelta(rawDelta, sourceItem) {
+      if (rawDelta > 0) processHealing(rawDelta, false, sourceItem);
+      else if (rawDelta < 0) processDamage(-rawDelta, sourceItem);
     }
 
     function updateConfirm() {
@@ -934,6 +1048,27 @@
         var change = choice.action === 'add' ? amount : -amount;
         applyTargetedChange(choice.target, change);
       }
+      render();
+      renderActiveItems();
+      checkDeath();
+      if (!dead) {
+        document.getElementById('turn-prompt').hidden = false;
+      }
+    });
+
+    document.getElementById('continue-turn').addEventListener('click', function () {
+      document.getElementById('turn-prompt').hidden = true;
+    });
+
+    // Placeholder for start-of-turn passive effects (Poison, Blessing of the
+    // Oracle, Blue Pill, etc.) once those are built.
+    function triggerStartOfTurnEffects() {
+      // Nothing implemented yet.
+    }
+
+    document.getElementById('next-turn').addEventListener('click', function () {
+      document.getElementById('turn-prompt').hidden = true;
+      triggerStartOfTurnEffects();
       render();
       renderActiveItems();
       checkDeath();

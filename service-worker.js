@@ -1,4 +1,4 @@
-const CACHE_NAME = 'another-door-v15';
+const CACHE_NAME = 'another-door-v16';
 const FILES = ['./', 'index.html', 'manifest.json', 'background.jpg',
   'icons/SprBabyBottleSmall_0.webp',
   'icons/SprBadTripSmall_0.webp',
@@ -52,12 +52,12 @@ const FILES = ['./', 'index.html', 'manifest.json', 'background.jpg',
   'icons/SprWoodenSpoonSmall_0.webp',
   'icons/SprWoolSmall_0.webp',
   'icons/SprZlataLiquorSmall_0.webp',
-  'characters/sprAiseHead_0.png',
-  'characters/sprBasaltHead_0.png',
-  'characters/sprKnightHead_0.png',
-  'characters/sprNecromancerHead_0.png',
-  'characters/sprRogueHead_0.png',
-  'characters/sprWinsletHead_0.png'
+  'Characters/sprAiseHead_0.png',
+  'Characters/sprBasaltHead_0.png',
+  'Characters/sprKnightHead_0.png',
+  'Characters/sprNecromancerHead_0.png',
+  'Characters/sprRogueHead_0.png',
+  'Characters/sprWinsletHead_0.png'
 ];
 
 self.addEventListener('install', (event) => {

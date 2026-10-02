@@ -930,10 +930,18 @@
         }
         var dmg = hit;
         if (owns('Predator Instinct') && values.maxhp > 0 && values.hp / values.maxhp <= 0.15) {
+          var beforePredator = dmg;
           dmg = Math.max(1, dmg - 20);
+          if (beforePredator - dmg > 0) {
+            showEffectPopup('-' + (beforePredator - dmg), 'Predator Instinct', 'gain');
+          }
         }
         if (armorStacks > 0) {
+          var beforeArmor = dmg;
           dmg = Math.max(armorStacks, dmg - 5 * armorStacks);
+          if (beforeArmor - dmg > 0) {
+            showEffectPopup('-' + (beforeArmor - dmg), "Knight's Armor", 'gain');
+          }
         }
         applyChange('hp', -dmg, sourceItem);
       });
@@ -1052,12 +1060,16 @@
       renderActiveItems();
       checkDeath();
       if (!dead) {
+        // Locked until the player says whether they're moving on, so another
+        // change can't be made while that decision is pending.
         document.getElementById('turn-prompt').hidden = false;
+        statControls.hidden = true;
       }
     });
 
     document.getElementById('continue-turn').addEventListener('click', function () {
       document.getElementById('turn-prompt').hidden = true;
+      updateDeadLock(); // unlocks stat-controls (unless the player is dead)
     });
 
     // Placeholder for start-of-turn passive effects (Poison, Blessing of the
@@ -1072,6 +1084,7 @@
       render();
       renderActiveItems();
       checkDeath();
+      updateDeadLock(); // unlocks stat-controls for the new turn (unless now dead)
     });
 
     document.getElementById('leave').addEventListener('click', function () {

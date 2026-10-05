@@ -67,6 +67,19 @@
       border-radius: 8px;
       padding: 8px;
     }
+    .player-counts {
+      margin-top: 6px;
+      display: flex;
+      gap: 8px;
+      font-size: 0.75rem;
+      opacity: 0.85;
+    }
+    .player-counts label { display: flex; align-items: center; gap: 4px; }
+    .player-counts input {
+      width: 40px;
+      padding: 4px;
+      flex: none;
+    }
     #buttons { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; }
     #list { flex: 1 1 auto; overflow-y: auto; }
     .row { display: flex; gap: 8px; }
@@ -265,6 +278,12 @@
         <div>HP: <span id="hp">100</span> / <span id="max-hp">100</span></div>
         <div>Gems: <span id="gems">0</span></div>
         <div class="secured">Secured gems: <span id="secured-gems">0</span></div>
+        <!-- Manually entered, since this app only tracks one player: used by
+             effects like Radiance and Pearly Pearl that care about the others. -->
+        <div class="player-counts">
+          <label>Alive: <input id="alive-count" type="number" inputmode="numeric" min="0" step="1" value="0"></label>
+          <label>Dead/Left: <input id="dead-count" type="number" inputmode="numeric" min="0" step="1" value="0"></label>
+        </div>
       </div>
       <!-- Active statuses / items: sit side by side, wrap to the next row when full -->
       <div id="active-items" class="stats-right"></div>
@@ -885,6 +904,17 @@
       }
     }
 
+    // Moves gems straight from current to secured (Golden Ticket), capped by
+    // however many current gems are actually available.
+    function secureGems(amount, sourceItem) {
+      var moved = Math.min(amount, values.gems);
+      if (moved <= 0) return;
+      values.gems -= moved;
+      values.secured += moved;
+      render();
+      showEffectPopup('+' + moved + ' Secured Gems', sourceItem, 'gain');
+    }
+
     // sourceItem: the item/status causing this heal, if any (e.g. later, a
     // healing tile might pass nothing, but a healing status effect would).
     function processHealing(amount, skipDoubling, sourceItem) {
@@ -1072,10 +1102,74 @@
       updateDeadLock(); // unlocks stat-controls (unless the player is dead)
     });
 
-    // Placeholder for start-of-turn passive effects (Poison, Blessing of the
-    // Oracle, Blue Pill, etc.) once those are built.
+    // Start-of-turn passive effects. Stacks scale linearly throughout (2
+    // stacks = 2x the per-stack amount), per how the rest of the app stacks.
+    // Blue Pill and Ka-Boom aren't here yet (they need their own auto-growing
+    // counters, separate from normal item stacks), and Ladybug's "trigger
+    // twice" isn't wired in.
     function triggerStartOfTurnEffects() {
-      // Nothing implemented yet.
+      var alive = Number(document.getElementById('alive-count').value) || 0;
+      var deadOrLeft = Number(document.getElementById('dead-count').value) || 0;
+
+      var poisonStacks = activeItems['Poison'] || 0;
+      if (poisonStacks > 0) processDamage(poisonStacks, 'Poison');
+
+      var tapewormStacks = activeItems['Tapeworm'] || 0;
+      if (tapewormStacks > 0) processDamage(tapewormStacks, 'Tapeworm');
+
+      var oracleStacks = activeItems['Blessing of the Oracle'] || 0;
+      if (oracleStacks > 0) {
+        dealGemsDelta(oracleStacks, 'Blessing of the Oracle');
+        if (pctRoll(oracleStacks)) {
+          processDamage(100, 'Blessing of the Oracle');
+        }
+      }
+
+      var threadStacks = activeItems['Final Thread'] || 0;
+      if (threadStacks > 0) {
+        processDamage(threadStacks, 'Final Thread');
+        dealGemsDelta(threadStacks * 2, 'Final Thread');
+      }
+
+      var sapStacks = activeItems['Golden Sap'] || 0;
+      if (sapStacks > 0 && values.maxhp > 0 && values.hp / values.maxhp < 0.25) {
+        dealGemsDelta(sapStacks * 5, 'Golden Sap');
+      }
+
+      var ticketStacks = activeItems['Golden Ticket'] || 0;
+      if (ticketStacks > 0) secureGems(ticketStacks, 'Golden Ticket');
+
+      var greenStacks = activeItems['Green Pill'] || 0;
+      if (greenStacks > 0) {
+        var uniqueCount = Object.keys(activeItems).filter(function (n) { return activeItems[n] > 0; }).length;
+        if (uniqueCount > 0) dealGemsDelta(greenStacks * uniqueCount, 'Green Pill');
+      }
+
+      var pigeonStacks = activeItems['Pigeon Head'] || 0;
+      if (pigeonStacks > 0 && (values.hp === 13 || values.hp === 31)) {
+        dealGemsDelta(pigeonStacks * 15, 'Pigeon Head');
+      }
+
+      var slimeStacks = activeItems['Slime Ball'] || 0;
+      if (slimeStacks > 0 && values.gems < values.hp) {
+        dealGemsDelta(slimeStacks, 'Slime Ball');
+      }
+
+      var dreamStacks = activeItems['Sweet Dreams'] || 0;
+      if (dreamStacks > 0) {
+        applyChange('maxhp', -3 * dreamStacks, 'Sweet Dreams');
+        processHealing(6 * dreamStacks, false, 'Sweet Dreams');
+      }
+
+      var radianceStacks = activeItems['Radiance'] || 0;
+      if (radianceStacks > 0 && alive > 0) {
+        processHealing(radianceStacks * alive, false, 'Radiance');
+      }
+
+      var pearlyStacks = activeItems['Pearly Pearl'] || 0;
+      if (pearlyStacks > 0 && deadOrLeft > 0) {
+        dealGemsDelta(pearlyStacks * 2 * deadOrLeft, 'Pearly Pearl');
+      }
     }
 
     document.getElementById('next-turn').addEventListener('click', function () {
